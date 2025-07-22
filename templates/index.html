@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MLS Point Locator & Report Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.7.0/dist/jspdf.plugin.autotable.min.js"></script>
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://cdn-icons-png.flaticon.com/512/5988/5988658.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://cdn-icons-png.flaticon.com/512/5988/5988658.png"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0 auto;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+        position: relative;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        font-size: 1.2em;
+        opacity: 0.9;
+        margin-bottom: 15px;
+      }
+
+      .user-info {
+        font-size: 0.9em;
+        opacity: 0.8;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        display: inline-block;
+      }
+
+      .health-indicator {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .health-indicator.online {
+        background: rgba(39, 174, 96, 0.2);
+        color: #27ae60;
+        border: 1px solid rgba(39, 174, 96, 0.3);
+      }
+
+      .health-indicator.offline {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+        border: 1px solid rgba(231, 76, 60, 0.3);
+      }
+
+      .health-indicator .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      .controls {
+        padding: 30px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .search-section {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        color: white;
+        padding: 25px;
+        margin-bottom: 30px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+      }
+
+      .search-section h3 {
+        margin-bottom: 15px;
+        font-size: 1.3em;
+        text-align: center;
+      }
+
+      .search-row {
+        display: flex;
+        gap: 15px;
+        align-items: end;
+      }
+
+      .search-input-group {
+        flex: 1;
+      }
+
+      .search-input-group label {
+        color: white;
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: block;
+      }
+
+      .search-input-container {
+        position: relative;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 8px;
+        font-size: 16px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        transition: all 0.3s ease;
+      }
+
+      .search-input::placeholder {
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        display: none;
+      }
+
+      .autocomplete-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        color: #333;
+        transition: background 0.2s;
+      }
+
+      .autocomplete-item:hover {
+        background: #f8f9fa;
+      }
+
+      .autocomplete-item:last-child {
+        border-bottom: none;
+      }
+
+      .search-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        padding: 12px 25px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        min-width: 120px;
+      }
+
+      .search-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .search-btn:disabled {
+        background: rgba(255, 255, 255, 0.1);
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-row {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .form-col {
+        flex: 1;
+        min-width: 250px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+
+      select,
+      input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: all 0.3s ease;
+        background: white;
+      }
+
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+      }
+
+      .btn:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .content {
+        display: flex;
+        min-height: 600px;
+      }
+
+      .map-container {
+        flex: 1;
+        position: relative;
+        background: #ecf0f1;
+      }
+
+      #map {
+        width: 100%;
+        height: 600px;
+        border: none;
+      }
+
+      .details-panel {
+        width: 400px;
+        background: white;
+        border-left: 1px solid #e9ecef;
+        padding: 30px;
+        overflow-y: auto;
+        max-height: 600px;
+      }
+
+      .details-header {
+        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+        color: white;
+        padding: 20px;
+        margin: -30px -30px 30px -30px;
+        border-radius: 0;
+      }
+
+      .details-header h3 {
+        margin: 0;
+        font-size: 1.4em;
+        font-weight: 300;
+      }
+
+      .detail-item {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #3498db;
+      }
+
+      .detail-label {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 5px;
+      }
+
+      .detail-value {
+        color: #7f8c8d;
+        font-size: 1.1em;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 50px;
+        color: #7f8c8d;
+        font-size: 1.2em;
+      }
+
+      .loading::after {
+        content: "";
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .download-btn {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        width: 100%;
+        margin-top: 20px;
+        padding: 15px;
+        font-size: 1.1em;
+      }
+
+      .download-btn:hover {
+        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+      }
+
+      .no-selection {
+        text-align: center;
+        padding: 50px 20px;
+        color: #7f8c8d;
+      }
+
+      .no-selection i {
+        font-size: 3em;
+        margin-bottom: 20px;
+        display: block;
+      }
+
+      .alert {
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+      }
+
+      .alert-info {
+        background: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+      }
+
+      .alert-warning {
+        background: #fff3cd;
+        border-color: #ffeaa7;
+        color: #856404;
+      }
+
+      .alert-success {
+        background: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+      }
+
+      .alert-error {
+        background: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+      }
+
+      .marker-popup {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      .marker-popup h4 {
+        margin: 0 0 10px 0;
+        color: #2c3e50;
+      }
+
+      .marker-popup p {
+        margin: 5px 0;
+        color: #7f8c8d;
+      }
+
+      .marker-popup .btn {
+        margin-top: 10px;
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+
+      .clear-btn {
+        background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-left: 10px;
+      }
+
+      .clear-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(149, 165, 166, 0.3);
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .status-badge.active {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      .status-badge.inactive {
+        background: #f8d7da;
+        color: #721c24;
+      }
+
+      .quick-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      .stat-card {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        border-left: 4px solid #3498db;
+      }
+
+      .stat-number {
+        font-size: 2em;
+        font-weight: bold;
+        color: #2c3e50;
+      }
+
+      .stat-label {
+        font-size: 0.9em;
+        color: #7f8c8d;
+        margin-top: 5px;
+      }
+
+      /* Notification popup at right side (top-right corner) */
+      .notification {
+        position: fixed;
+        top: 32px;
+        right: 32px;
+        min-width: 270px;
+        max-width: 340px;
+        z-index: 9999;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+        border-radius: 8px;
+        padding: 18px 40px 18px 18px;
+        font-size: 1em;
+        font-weight: 500;
+        transition: transform 0.2s, opacity 0.2s;
+        opacity: 1;
+        background: #fff;
+        color: #222;
+        border-left: 5px solid #3498db;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .notification.alert-success {
+        border-left-color: #27ae60;
+        background: #eafaf1;
+        color: #155724;
+      }
+
+      .notification.alert-error {
+        border-left-color: #e74c3c;
+        background: #f8d7da;
+        color: #721c24;
+      }
+
+      .notification.alert-info {
+        border-left-color: #3498db;
+        background: #e9f6fc;
+        color: #0c5460;
+      }
+
+      .notification.alert-warning {
+        border-left-color: #f1c40f;
+        background: #fff8e1;
+        color: #856404;
+      }
+
+      .notification button {
+        background: none;
+        border: none;
+        color: #888;
+        font-size: 20px;
+        cursor: pointer;
+        margin-left: auto;
+        margin-right: -10px;
+        margin-top: -8px;
+        margin-bottom: -8px;
+        padding: 0 4px;
+        transition: color 0.2s;
+      }
+
+      .notification button:hover {
+        color: #222;
+      }
+
+      @media (max-width: 1024px) {
+        .content {
+          flex-direction: column;
+        }
+        .details-panel {
+          width: 100%;
+          max-height: 400px;
+        }
+        .form-row {
+          flex-direction: column;
+        }
+        .form-col {
+          min-width: 100%;
+        }
+        .search-row {
+          flex-direction: column;
+          gap: 15px;
+        }
+        .health-indicator {
+          position: static;
+          margin-top: 10px;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          margin: 10px;
+          border-radius: 10px;
+        }
+        .header {
+          padding: 20px;
+        }
+        .header h1 {
+          font-size: 2em;
+        }
+        .controls {
+          padding: 20px;
+        }
+        .details-panel {
+          padding: 20px;
+        }
+        .search-section {
+          padding: 20px;
+        }
+        .quick-stats {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .notification {
+          right: 8px;
+          top: 8px;
+          min-width: 190px;
+          max-width: 98vw;
+          font-size: 0.95em;
+          padding: 12px 32px 12px 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="health-indicator" id="healthIndicator">
+          <div class="status-dot"></div>
+          <span id="healthStatus">Checking...</span>
+        </div>
+        <h1>MLS Point Locator & Report Generator</h1>
+        <p>
+          Find, explore, and generate comprehensive PDF reports for MLS points
+        </p>
+        <div class="user-info">
+          <span>User: <strong id="currentUser">Loading...</strong></span> |
+          <span
+            >Last Updated: <strong id="currentTime">Loading...</strong></span
+          >
+        </div>
+      </div>
+      <div class="controls">
+        <div class="search-section">
+          <h3>🔍 Quick Search by MLS Point Code</h3>
+          <div class="search-row">
+            <div class="search-input-group">
+              <label for="mlsCodeSearch">Enter MLS Point Code:</label>
+              <div class="search-input-container">
+                <input
+                  type="text"
+                  id="mlsCodeSearch"
+                  class="search-input"
+                  placeholder="Type MLS code (e.g., MLS001, MLS002...)"
+                  autocomplete="off"
+                />
+                <div
+                  id="autocompleteDropdown"
+                  class="autocomplete-dropdown"
+                ></div>
+              </div>
+            </div>
+            <div>
+              <button
+                class="search-btn"
+                onclick="searchByMLSCode()"
+                id="searchBtn"
+              >
+                🔍 Search
+              </button>
+              <button class="clear-btn" onclick="clearSearch()" id="clearBtn">
+                ✕ Clear
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label for="district">Select District:</label>
+            <select id="district" name="district">
+              <option value="">Choose a district...</option>
+            </select>
+          </div>
+          <div class="form-col">
+            <label for="mandal">Select Mandal:</label>
+            <select id="mandal" name="mandal" disabled>
+              <option value="">Choose a mandal...</option>
+            </select>
+          </div>
+          <div class="form-col">
+            <label>&nbsp;</label>
+            <button class="btn" onclick="loadMLSPoints()" id="loadBtn" disabled>
+              Load MLS Points
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="map-container">
+          <div id="map"></div>
+        </div>
+        <div class="details-panel" id="detailsPanel">
+          <div class="no-selection">
+            <div style="font-size: 3em; margin-bottom: 20px">📍</div>
+            <h3>Select an MLS Point</h3>
+            <p>
+              Use the search bar above to find a specific MLS point by code, or
+              choose a district and mandal to view all points in that area.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JS dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script>
+      // --- Globals
+      let map,
+        markersGroup,
+        currentMLSCode = null,
+        allMLSCodes = [],
+        currentPoints = [];
+
+      // --- Initialization
+      document.addEventListener("DOMContentLoaded", function () {
+        initMap();
+        loadUserInfo();
+        checkHealth();
+        loadDistricts();
+        loadAllMLSCodes();
+        setupAutocomplete();
+        setupEventListeners();
+        setInterval(checkHealth, 30000);
+      });
+
+      // --- Map
+      function initMap() {
+        map = L.map("map").setView([16.5062, 80.648], 8);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "© OpenStreetMap contributors | MLS Point Locator",
+        }).addTo(map);
+        markersGroup = L.layerGroup().addTo(map);
+      }
+
+      // --- User & Health
+      async function loadUserInfo() {
+        try {
+          const response = await fetch("/api/user");
+          if (response.ok) {
+            const userData = await response.json();
+            document.getElementById("currentUser").textContent =
+              userData.user || "Nazeershaik99";
+            document.getElementById("currentTime").textContent =
+              userData.timestamp || new Date().toLocaleString();
+          }
+        } catch {
+          document.getElementById("currentUser").textContent = "Nazeershaik99";
+          document.getElementById("currentTime").textContent =
+            new Date().toLocaleString();
+        }
+      }
+      async function checkHealth() {
+        const healthIndicator = document.getElementById("healthIndicator");
+        const healthStatus = document.getElementById("healthStatus");
+        try {
+          const response = await fetch("/api/health");
+          if (response.ok) {
+            const healthData = await response.json();
+            healthIndicator.className = "health-indicator online";
+            healthStatus.textContent = healthData.status || "Online";
+          } else throw new Error();
+        } catch {
+          healthIndicator.className = "health-indicator offline";
+          healthStatus.textContent = "Offline";
+        }
+      }
+
+      // --- Autocomplete
+      async function loadAllMLSCodes() {
+        try {
+          const response = await fetch("/api/all_mls_codes");
+          if (response.ok) allMLSCodes = await response.json();
+        } catch {}
+      }
+      function setupAutocomplete() {
+        const searchInput = document.getElementById("mlsCodeSearch");
+        const dropdown = document.getElementById("autocompleteDropdown");
+        searchInput.addEventListener("input", function () {
+          const query = this.value.trim().toLowerCase();
+          if (query.length < 2) return (dropdown.style.display = "none");
+          const matches = allMLSCodes
+            .filter((code) => code.toLowerCase().includes(query))
+            .slice(0, 10);
+          if (matches.length > 0) {
+            dropdown.innerHTML = matches
+              .map(
+                (code) =>
+                  `<div class="autocomplete-item" onclick="selectMLSCode('${code}')">${code}</div>`
+              )
+              .join("");
+            dropdown.style.display = "block";
+          } else dropdown.style.display = "none";
+        });
+        document.addEventListener("click", function (e) {
+          if (!searchInput.contains(e.target) && !dropdown.contains(e.target))
+            dropdown.style.display = "none";
+        });
+        searchInput.addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            dropdown.style.display = "none";
+            searchByMLSCode();
+          }
+        });
+      }
+      function selectMLSCode(code) {
+        document.getElementById("mlsCodeSearch").value = code;
+        document.getElementById("autocompleteDropdown").style.display = "none";
+        searchByMLSCode();
+      }
+
+      // --- Event Listeners
+      function setupEventListeners() {
+        document
+          .getElementById("district")
+          .addEventListener("change", function () {
+            const mandalSelect = document.getElementById("mandal");
+            const loadBtn = document.getElementById("loadBtn");
+            if (this.value) loadMandals(this.value);
+            else {
+              mandalSelect.innerHTML =
+                '<option value="">Choose a mandal...</option>';
+              mandalSelect.disabled = true;
+              loadBtn.disabled = true;
+            }
+          });
+        document
+          .getElementById("mandal")
+          .addEventListener("change", function () {
+            document.getElementById("loadBtn").disabled = !this.value;
+          });
+      }
+
+      // --- Search by MLS code
+      async function searchByMLSCode() {
+        const mlsCode = document.getElementById("mlsCodeSearch").value.trim();
+        const detailsPanel = document.getElementById("detailsPanel");
+        const searchBtn = document.getElementById("searchBtn");
+        if (!mlsCode)
+          return showNotification(
+            "Please enter a valid MLS Point Code.",
+            "warning"
+          );
+        searchBtn.disabled = true;
+        searchBtn.textContent = "Searching...";
+        detailsPanel.innerHTML = `<div class="loading">Searching for MLS Code: ${mlsCode}</div>`;
+        try {
+          const searchResponse = await fetch(
+            `/api/search_mls_code/${encodeURIComponent(mlsCode)}`
+          );
+          if (!searchResponse.ok) throw new Error();
+          const searchData = await searchResponse.json();
+          if (!searchData.success)
+            throw new Error(searchData.error || "MLS code not found");
+          markersGroup.clearLayers();
+          const point = searchData.mls_point;
+          L.marker([point.latitude, point.longitude])
+            .bindPopup(createMarkerPopup(point))
+            .addTo(markersGroup)
+            .openPopup();
+          map.setView([point.latitude, point.longitude], 15);
+          showMLSDetails(point);
+          currentMLSCode = mlsCode;
+          showNotification("MLS Point found successfully!", "success");
+        } catch (error) {
+          showNotification(`No MLS Point found for code: ${mlsCode}`, "error");
+          showError(
+            `MLS Point with code "${mlsCode}" not found in the database.`
+          );
+        } finally {
+          searchBtn.disabled = false;
+          searchBtn.textContent = "🔍 Search";
+        }
+      }
+      function clearSearch() {
+        document.getElementById("mlsCodeSearch").value = "";
+        document.getElementById("autocompleteDropdown").style.display = "none";
+        clearMapAndDetails();
+      }
+      function clearMapAndDetails() {
+        markersGroup.clearLayers();
+        map.setView([16.5062, 80.648], 8);
+        currentMLSCode = null;
+        currentPoints = [];
+        document.getElementById("detailsPanel").innerHTML = `
+                <div class="no-selection">
+                    <div style="font-size: 3em; margin-bottom: 20px;">📍</div>
+                    <h3>Select an MLS Point</h3>
+                    <p>Use the search bar above to find a specific MLS point by code, or choose a district and mandal to view all points in that area.</p>
+                </div>
+            `;
+      }
+
+      // --- District/Mandal/Points Loading
+      async function loadDistricts() {
+        try {
+          const response = await fetch("/api/districts");
+          if (!response.ok) throw new Error();
+          const districts = await response.json();
+          const districtSelect = document.getElementById("district");
+          districtSelect.innerHTML =
+            '<option value="">Choose a district...</option>';
+          districts.forEach((district) => {
+            const option = document.createElement("option");
+            option.value = district["District Code"];
+            option.textContent = district["District Name"];
+            districtSelect.appendChild(option);
+          });
+        } catch {
+          showNotification(
+            "Failed to load districts. Please refresh the page.",
+            "error"
+          );
+        }
+      }
+      async function loadMandals(districtCode) {
+        try {
+          const response = await fetch(
+            `/api/mandals/${encodeURIComponent(districtCode)}`
+          );
+          if (!response.ok) throw new Error();
+          const mandals = await response.json();
+          const mandalSelect = document.getElementById("mandal");
+          mandalSelect.innerHTML =
+            '<option value="">Choose a mandal...</option>';
+          mandals.forEach((mandal) => {
+            const option = document.createElement("option");
+            option.value = mandal["Mandal Code"];
+            option.textContent = mandal["Mandal Name"];
+            mandalSelect.appendChild(option);
+          });
+          mandalSelect.disabled = false;
+        } catch {
+          showNotification(
+            "Failed to load mandals. Please try again.",
+            "error"
+          );
+        }
+      }
+      async function loadMLSPoints() {
+        const districtCode = document.getElementById("district").value;
+        const mandalCode = document.getElementById("mandal").value;
+        const detailsPanel = document.getElementById("detailsPanel");
+        const loadBtn = document.getElementById("loadBtn");
+        if (!districtCode || !mandalCode)
+          return showNotification(
+            "Please select both district and mandal.",
+            "warning"
+          );
+        loadBtn.disabled = true;
+        loadBtn.textContent = "Loading...";
+        detailsPanel.innerHTML =
+          '<div class="loading">Loading MLS Points...</div>';
+        try {
+          const response = await fetch(
+            `/api/mls_points/${encodeURIComponent(
+              districtCode
+            )}/${encodeURIComponent(mandalCode)}`
+          );
+          if (!response.ok) throw new Error();
+          const points = await response.json();
+          currentPoints = points;
+          if (!points || points.length === 0) {
+            showNotification(
+              "No MLS points found for the selected district and mandal.",
+              "info"
+            );
+            showError("No MLS points found for the selected area.");
+            return;
+          }
+          markersGroup.clearLayers();
+          const bounds = L.latLngBounds();
+          let validPoints = 0;
+          points.forEach((point) => {
+            const lat = parseFloat(point.latitude),
+              lng = parseFloat(point.longitude);
+            if (isNaN(lat) || isNaN(lng)) return;
+            L.marker([lat, lng])
+              .bindPopup(createMarkerPopup(point))
+              .addTo(markersGroup);
+            bounds.extend([lat, lng]);
+            validPoints++;
+          });
+          if (validPoints > 0) map.fitBounds(bounds, { padding: [20, 20] });
+          else throw new Error("No valid coordinates found in the data");
+          showPointsSummary(points);
+          showNotification(
+            `Successfully loaded ${validPoints} MLS points.`,
+            "success"
+          );
+        } catch (error) {
+          showNotification(
+            `Failed to load MLS points: ${error.message}`,
+            "error"
+          );
+          showError(
+            `Failed to load MLS points from the server. Error: ${error.message}`
+          );
+        } finally {
+          loadBtn.disabled = false;
+          loadBtn.textContent = "Load MLS Points";
+        }
+      }
+
+      // --- Details Panel & Summary
+      function showMLSDetails(point) {
+        const detailsPanel = document.getElementById("detailsPanel");
+        const statusClass = point.status === "Active" ? "active" : "inactive";
+        detailsPanel.innerHTML = `
+                <div class="details-header"><h3>MLS Point Details</h3></div>
+                <div class="detail-item"><div class="detail-label">MLS Point Code</div><div class="detail-value">${
+                  point.mls_point_code || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">District</div><div class="detail-value">${
+                  point.district_name || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">Mandal</div><div class="detail-value">${
+                  point.mandal_name || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">Village</div><div class="detail-value">${
+                  point.village_name || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">${
+                  point.latitude || ""
+                }, ${point.longitude || ""}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="status-badge ${statusClass}">${
+          point.status || ""
+        }</span></div></div>
+                <div class="detail-item"><div class="detail-label">Address</div><div class="detail-value">${
+                  point.mls_point_address || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">Incharge Name</div><div class="detail-value">${
+                  point.mls_point_incharge_name || ""
+                }</div></div>
+                <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">${
+                  point.phone_number || ""
+                }</div></div>
+                <button class="btn download-btn" onclick="downloadPDF('${
+                  point.mls_point_code
+                }')">📄 Download PDF Report</button>
+            `;
+      }
+
+      function showPointsSummary(points) {
+        document.getElementById("detailsPanel").innerHTML = `
+        <div class="details-header"><h3>MLS Points in Selected Area</h3></div>
+        <div class="detail-item" style="padding:0;">
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f0f4f8;">
+                        <th style="padding:8px; border-bottom:1px solid #ddd;">Code</th>
+                        <th style="padding:8px; border-bottom:1px solid #ddd;">Name</th>
+                        <th style="padding:8px; border-bottom:1px solid #ddd;">Incharge</th>
+                        <th style="padding:8px; border-bottom:1px solid #ddd;">Phone</th>
+                        <th style="padding:8px; border-bottom:1px solid #ddd;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${points
+                      .map(
+                        (point) => `
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #eee;">${
+                              point.mls_point_code || ""
+                            }</td>
+                            <td style="padding:8px; border-bottom:1px solid #eee;">${
+                              point.mls_point_name || ""
+                            }</td>
+                            <td style="padding:8px; border-bottom:1px solid #eee;">${
+                              point.mls_point_incharge_name || ""
+                            }</td>
+                            <td style="padding:8px; border-bottom:1px solid #eee;">${
+                              point.phone_number || ""
+                            }</td>
+                            <td style="padding:8px; border-bottom:1px solid #eee;">
+                                <button class="btn" style="padding:6px 14px; font-size:13px;" onclick="selectMLSPoint('${
+                                  point.mls_point_code
+                                }')">View Details</button>
+                            </td>
+                        </tr>
+                        `
+                      )
+                      .join("")}
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top: 20px;">
+            <p><strong>Click "View Details"</strong> for full information and download PDF for any MLS point.</p>
+        </div>
+    `;
+      }
+
+      // --- Marker Popup
+      function createMarkerPopup(point) {
+        const statusClass = point.status === "Active" ? "active" : "inactive";
+        return `
+                <div class="marker-popup">
+                    <h4>${point.mls_point_code || ""}</h4>
+                    <p><strong>District:</strong> ${
+                      point.district_name || ""
+                    }</p>
+                    <p><strong>Mandal:</strong> ${point.mandal_name || ""}</p>
+                    <p><strong>Village:</strong> ${point.village_name || ""}</p>
+                    <p><strong>Status:</strong> <span class="status-badge ${statusClass}">${
+          point.status || ""
+        }</span></p>
+                    <button class="btn" onclick="selectMLSPoint('${
+                      point.mls_point_code
+                    }')">View Details</button>
+                </div>
+            `;
+      }
+
+      // --- Details fetch on selection
+      async function selectMLSPoint(mlsCode) {
+        currentMLSCode = mlsCode;
+        document.getElementById("mlsCodeSearch").value = mlsCode;
+        try {
+          const response = await fetch(
+            `/api/search_mls_code/${encodeURIComponent(mlsCode)}`
+          );
+          if (!response.ok) throw new Error();
+          const data = await response.json();
+          if (!data.success)
+            throw new Error(data.error || "MLS code not found");
+          showMLSDetails(data.mls_point);
+        } catch (error) {
+          showError(
+            `Failed to load detailed information for MLS code: ${mlsCode}. Error: ${error.message}`
+          );
+        }
+      }
+
+      // --- PDF Download
+      async function downloadPDF(mlsCode) {
+        if (!mlsCode)
+          return showNotification(
+            "No MLS point selected for PDF generation.",
+            "warning"
+          );
+        try {
+          showNotification("Generating PDF report...", "info");
+          const response = await fetch(
+            `/api/search_mls_code/${encodeURIComponent(mlsCode)}`
+          );
+          if (!response.ok) throw new Error("API not OK: " + response.status);
+          const data = await response.json();
+          if (!data.success || !data.mls_point)
+            throw new Error("MLS code not found or no data");
+          const point = data.mls_point;
+
+          function get(keys) {
+            for (let k of keys) {
+              if (
+                point[k] !== undefined &&
+                point[k] !== null &&
+                point[k] !== ""
+              )
+                return String(point[k]);
+              let found = Object.keys(point).find(
+                (pKey) => pKey.toLowerCase() === k.toLowerCase()
+              );
+              if (found && point[found]) return String(point[found]);
+            }
+            return "";
+          }
+
+          // Load jsPDF with autotable
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({
+            orientation: "portrait",
+            unit: "pt",
+            format: "a4",
+          });
+
+          // Define colors to match template
+          const headerBlue = [41, 128, 185]; // Blue color matching the template
+          const whiteText = [255, 255, 255];
+          const blackText = [0, 0, 0];
+          const lightGrey = [248, 249, 250]; // Very light background
+
+          const pageWidth = doc.internal.pageSize.width;
+          const margin = 40;
+          const contentWidth = pageWidth - margin * 2;
+          let yPos = margin;
+
+          // Add white background
+          doc.setFillColor(255, 255, 255);
+          doc.rect(0, 0, pageWidth, doc.internal.pageSize.height, "F");
+
+          // Title Banner - MLS AT A GLANCE
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 35, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(16);
+          doc.setFont("helvetica", "bold");
+          doc.text("MLS AT A GLANCE", pageWidth / 2, yPos + 23, {
+            align: "center",
+          });
+          yPos += 50;
+
+          // MLS Point Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("MLS Point Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          // Create single table for all MLS Point Details
+          const mlsPointRows = [
+            ["MLS Point Code", get(["mls_point_code"])],
+            ["MLS Point Name", get(["mls_point_name"])],
+            ["District Name", get(["district_name"])],
+            ["Mandal Name", get(["mandal_name"])],
+            ["MLS Point Address", get(["mls_point_address"])],
+            ["Latitude", "Longitude", get(["latitude"]), get(["longitude"])],
+            ["Fetch Live Location", "", "", ""],
+          ];
+
+          // Handle the latitude/longitude row specially
+          doc.autoTable({
+            startY: yPos,
+            body: [
+              ["MLS Point Code", get(["mls_point_code"])],
+              ["MLS Point Name", get(["mls_point_name"])],
+              ["District Name", get(["district_name"])],
+              ["Mandal Name", get(["mandal_name"])],
+              ["MLS Point Address", get(["mls_point_address"])],
+            ],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.35,
+                fillColor: lightGrey,
+              },
+              1: {
+                cellWidth: contentWidth * 0.65,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+          yPos = doc.lastAutoTable.finalY;
+
+          // Lat/Long row with 4 columns
+          doc.autoTable({
+            startY: yPos,
+            body: [
+              ["Latitude", "Longitude", get(["latitude"]), get(["longitude"])],
+            ],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.175,
+                fillColor: lightGrey,
+              },
+              1: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.175,
+                fillColor: lightGrey,
+              },
+              2: {
+                cellWidth: contentWidth * 0.325,
+                fillColor: [255, 255, 255],
+              },
+              3: {
+                cellWidth: contentWidth * 0.325,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+          yPos = doc.lastAutoTable.finalY;
+
+          // Fetch Live Location row
+          doc.autoTable({
+            startY: yPos,
+            body: [["Fetch Live Location", ""]],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.35,
+                fillColor: lightGrey,
+              },
+              1: {
+                cellWidth: contentWidth * 0.65,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // Incharge Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Incharge Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          const inchargeData = [
+            [
+              "MLS Point Incharge CFMS / Corporation EMP ID",
+              get(["mls_point_incharge_cfms_corporation_emp_id"]),
+            ],
+            ["MLS Point Incharge Name", get(["mls_point_incharge_name"])],
+            ["Designation", get(["designation"])],
+            ["Aadhaar Number", get(["aadhaar_number"])],
+            ["Phone Number", get(["phone_number"])],
+          ];
+
+          doc.autoTable({
+            startY: yPos,
+            body: inchargeData,
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.35,
+                fillColor: lightGrey,
+              },
+              1: {
+                cellWidth: contentWidth * 0.65,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // DEO Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("DEO Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          const deoData = [
+            ["DEO CFMS ID / Corporation Emp ID", get(["deo_cfms_id"])],
+            ["DEO Name", get(["deo_name"])],
+            ["Aadhaar Number", get(["deo_aadhaar_number"])],
+            ["DEO Phone Number", get(["deo_phone_number"])],
+          ];
+
+          doc.autoTable({
+            startY: yPos,
+            body: deoData,
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.35,
+                fillColor: lightGrey,
+              },
+              1: {
+                cellWidth: contentWidth * 0.65,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // Godown Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Godown Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          // Multi-column header and data for Godown Details
+          const godownHeaders = [
+            "Godown Area",
+            "Storage Capacity",
+            "Owned / Hired",
+            "If rented, Private / AMC / Other",
+            "Weighbridge Availability",
+          ];
+          const godownValues = [
+            get(["godown_area"]) || "17,100 Sq. Ft.",
+            get(["storage_capacity"]) || "2,300 MTs",
+            get(["owned_hired"]) || "HIRED",
+            get(["rental_type"]) || "OTHER",
+            get(["weighbridge_availability"]) || "NO",
+          ];
+
+          doc.autoTable({
+            startY: yPos,
+            head: [godownHeaders],
+            body: [godownValues],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 9,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+              halign: "center",
+            },
+            headStyles: {
+              fontStyle: "bold",
+              fillColor: lightGrey,
+              textColor: blackText,
+            },
+            bodyStyles: {
+              fillColor: [255, 255, 255],
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // Location wise Image Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Location wise Image", margin + 10, yPos + 16);
+
+          // Add instruction text
+          doc.setFontSize(9);
+          doc.setTextColor(...whiteText);
+          doc.text(
+            "(click location to capture image)",
+            contentWidth + margin - 10,
+            yPos + 16,
+            { align: "right" }
+          );
+          yPos += 25;
+
+          // Location image grid - 6 columns
+          const locationHeaders = [
+            "Entrance",
+            "Exit",
+            "Loading Area",
+            "Unloading Area",
+            "Storage",
+            "Storage",
+          ];
+          const imageBoxes = ["", "", "", "", "", ""];
+
+          doc.autoTable({
+            startY: yPos,
+            head: [locationHeaders],
+            body: [imageBoxes],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 9,
+              cellPadding: 20,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+              halign: "center",
+              valign: "middle",
+            },
+            headStyles: {
+              fontStyle: "bold",
+              fillColor: lightGrey,
+              textColor: blackText,
+              cellPadding: 6,
+            },
+            bodyStyles: {
+              fillColor: [255, 255, 255],
+              minCellHeight: 40,
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // Hamalies and Vehicle Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Hamalies and Vehicle Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          const hamaliesHeaders = [
+            "Hamalies Working",
+            "Stage - II Vehicles Registered",
+            "Vehicles having GPS Devices",
+          ];
+          const hamaliesValues = [
+            get(["hamalies_working"]) || "25",
+            get(["stage_2_vehicles"]) || "5",
+            get(["gps_vehicles"]) || "5",
+          ];
+
+          doc.autoTable({
+            startY: yPos,
+            head: [hamaliesHeaders],
+            body: [hamaliesValues],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+              halign: "center",
+            },
+            headStyles: {
+              fontStyle: "bold",
+              fillColor: lightGrey,
+              textColor: blackText,
+            },
+            bodyStyles: {
+              fillColor: [255, 255, 255],
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // CC Cameras Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("CC Cameras Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          const cameraHeaders = [
+            "CC Cameras installed",
+            "Cameras with Live Feed",
+            "Cameras Maintenance Vendor",
+          ];
+          const cameraValues = [
+            get(["cc_cameras_installed"]) || "8",
+            get(["live_feed_cameras"]) || "8",
+            get(["maintenance_vendor"]) || "MAA DIGITAL SECURITY SYSTEM",
+          ];
+
+          doc.autoTable({
+            startY: yPos,
+            head: [cameraHeaders],
+            body: [cameraValues],
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+              halign: "center",
+            },
+            headStyles: {
+              fontStyle: "bold",
+              fillColor: lightGrey,
+              textColor: blackText,
+            },
+            bodyStyles: {
+              fillColor: [255, 255, 255],
+            },
+          });
+          yPos = doc.lastAutoTable.finalY + 15;
+
+          // Camera wise Location & IP Details Section
+          doc.setFillColor(...headerBlue);
+          doc.rect(margin, yPos, contentWidth, 25, "F");
+          doc.setTextColor(...whiteText);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Camera wise Location & IP Details", margin + 10, yPos + 16);
+          yPos += 25;
+
+          // Create camera details in pairs (Location and IP Address for each camera)
+          const cameraDetails = [];
+          for (let i = 1; i <= 8; i++) {
+            cameraDetails.push([
+              `Camera ${i} Location`,
+              get([`camera_${i}_location`]),
+            ]);
+            cameraDetails.push([
+              `Camera ${i} IP Address`,
+              get([`camera_${i}_ip`]),
+            ]);
+          }
+
+          doc.autoTable({
+            startY: yPos,
+            body: cameraDetails,
+            theme: "grid",
+            tableWidth: contentWidth,
+            margin: { left: margin, right: margin },
+            styles: {
+              fontSize: 10,
+              cellPadding: 6,
+              textColor: blackText,
+              lineColor: [200, 200, 200],
+              lineWidth: 0.5,
+            },
+            columnStyles: {
+              0: {
+                fontStyle: "bold",
+                cellWidth: contentWidth * 0.35,
+                fillColor: lightGrey,
+              },
+              1: {
+                cellWidth: contentWidth * 0.65,
+                fillColor: [255, 255, 255],
+              },
+            },
+          });
+
+          // Save file with proper naming
+          const code = get(["mls_point_code"]) || "MLS";
+          const name = get(["mls_point_name"]) || "Report";
+          const safeFile = `${code}_${name}`.replace(/[^\w\-]+/g, "_");
+          doc.save(`${safeFile}_MLS_Report.pdf`);
+          showNotification("PDF report generated and downloaded!", "success");
+        } catch (err) {
+          showNotification(
+            "Failed to generate PDF report. Please try again.",
+            "error"
+          );
+          console.error(err);
+          alert(err?.message ?? JSON.stringify(err));
+        }
+      }
+      // --- Error & Notification
+      function showError(message, details = null) {
+        document.getElementById("detailsPanel").innerHTML = `
+                <div class="no-selection">
+                    <div style="font-size: 3em; margin-bottom: 20px; color: #e74c3c;">⚠️</div>
+                    <h3>Error</h3>
+                    <p style="color: #e74c3c;">${message}</p>
+                    ${
+                      details
+                        ? `<details style="margin-top: 10px; color: #666;"><summary>Technical Details</summary><pre>${details}</pre></details>`
+                        : ""
+                    }
+                    <button class="btn" onclick="clearMapAndDetails()" style="margin-top: 20px;">Try Again</button>
+                </div>
+            `;
+      }
+      function showNotification(message, type = "info") {
+        const existing = document.querySelector(".notification");
+        if (existing) existing.remove();
+        const notification = document.createElement("div");
+        notification.className = `notification alert alert-${type}`;
+        notification.innerHTML = `
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+            `;
+        document.body.insertBefore(notification, document.body.firstChild);
+        setTimeout(() => {
+          if (notification.parentElement) notification.remove();
+        }, 5000);
+      }
+
+      // --- Export functions to global
+      window.searchByMLSCode = searchByMLSCode;
+      window.clearSearch = clearSearch;
+      window.loadMLSPoints = loadMLSPoints;
+      window.selectMLSCode = selectMLSCode;
+      window.selectMLSPoint = selectMLSPoint;
+      window.downloadPDF = downloadPDF;
+      window.clearMapAndDetails = clearMapAndDetails;
+    </script>
+  </body>
+</html>
